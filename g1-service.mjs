@@ -70,7 +70,7 @@ const server = createServer(async (req, res) => {
 
   // Health check — no auth needed
   if (req.method === 'GET' && url.pathname === '/healthz') {
-    return json(res, 200, { ok: true, rdp: pool.availableCount() });
+    return json(res, 200, { ok: true, mode: 'direct-playwright' });
   }
 
   if (!auth(req)) return json(res, 401, { error: 'unauthorized' });

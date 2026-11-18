@@ -58,9 +58,6 @@ export function queuePosition(jobId) {
   return queue.findIndex(j => j.jobId === jobId) + 1;
 }
 
-export function poolStatus() {
-  return pool.status();
-}
 
 // ─── Internal dispatcher ─────────────────────────────────────────────────────
 
