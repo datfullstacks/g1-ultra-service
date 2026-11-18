@@ -5,7 +5,7 @@
   "scripts": {
     "start": "node g1-service.mjs",
     "dev": "node --watch g1-service.mjs",
-    "postinstall": "npx playwright install chromium --with-deps"
+    "postinstall": "echo 'skipped browser install — using base image'"
   },
   "dependencies": {
     "node-fetch": "^3.3.2",
