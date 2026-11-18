@@ -4,10 +4,11 @@
   "type": "module",
   "scripts": {
     "start": "node g1-service.mjs",
-    "dev": "node --watch g1-service.mjs"
+    "dev": "node --watch g1-service.mjs",
+    "postinstall": "npx playwright install chromium --with-deps"
   },
   "dependencies": {
-    "mongodb": "^6.8.0",
-    "node-fetch": "^3.3.2"
+    "node-fetch": "^3.3.2",
+    "playwright": "^1.49.0"
   }
 }

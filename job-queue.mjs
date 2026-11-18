@@ -1,14 +1,9 @@
 /**
- * Job queue — nhận job từ bot, dispatch đến RDP pool
+ * Job queue — nhận job từ bot, chạy Playwright activation trực tiếp
+ * (Không cần RDP pool — g1-ultra-service tự activate)
  */
 import { randomUUID } from 'node:crypto';
-import { pool } from './rdp-pool.mjs';
-
-import { fileURLToPath } from 'node:url';
-import { dirname, join } from 'node:path';
-
-const __dirname = dirname(fileURLToPath(import.meta.url));
-const EXTENSION_PATH = join(__dirname, '..', 'extracted', 'extension_g130tb_ultra');
+import { activateG1 } from './g1-activate.mjs';
 
 const PRESET_MAP = {
   '20tb:12': 'ultra20tb_12m',
@@ -79,38 +74,26 @@ async function _dispatch() {
     return;
   }
 
-  let node;
-  try {
-    node = await pool.acquire(600_000);
-  } catch (err) {
-    _finish(job, false, err.message);
-    return;
-  }
-
   // Remove from pending queue
   queue.splice(queue.indexOf(job), 1);
   job.status = 'processing';
-  job.rdpName = node.name;
 
   try {
-    const result = await node.runJob({
+    const result = await activateG1({
       email: job.email,
       password: job.password,
       secret: job.secret,
       presetId,
-      extensionPath: EXTENSION_PATH,
-      proxy: job.proxy ?? null,
     });
 
     if (result?.ok) {
       _finish(job, true, result.message ?? `Google One Ultra ${job.sku.toUpperCase()} ${job.months}m activated`);
     } else {
-      _finish(job, false, result?.message ?? 'RDP trả về lỗi không rõ');
+      _finish(job, false, result?.message ?? 'Activation thất bại');
     }
   } catch (err) {
-    _finish(job, false, `Lỗi kết nối RDP (${node.name}): ${err.message}`);
+    _finish(job, false, `Activation error: ${err.message}`);
   } finally {
-    pool.release(node);
     // Try next job
     setImmediate(_dispatch);
   }

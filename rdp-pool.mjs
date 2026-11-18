@@ -35,7 +35,9 @@ class RDPNode {
   async healthCheck() {
     try {
       const { default: fetch } = await import('node-fetch');
-      const res = await fetch(`${this.baseUrl}/api/v1/version`, { signal: AbortSignal.timeout(5000) });
+      // g1-rdp-worker expose /healthz; Multilogin expose /api/v1/version — thử cả hai
+      const res = await fetch(`${this.baseUrl}/healthz`, { signal: AbortSignal.timeout(5000) })
+        .catch(() => fetch(`${this.baseUrl}/api/v1/version`, { signal: AbortSignal.timeout(5000) }));
       this.healthy = res.ok;
     } catch {
       this.healthy = false;

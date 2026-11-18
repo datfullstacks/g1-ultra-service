@@ -4,19 +4,11 @@
  */
 import { createServer } from 'node:http';
 import { submitJob, createJob, getJob, getActiveJobByUser, queuePosition, setNotify } from './job-queue.mjs';
-import { pool } from './rdp-pool.mjs';
 
 const PORT = process.env.PORT || 3000;
 const API_SECRET = process.env.G1_SERVICE_API_SECRET || '';
 
 console.log('[g1-service] starting on port', PORT);
-
-// Health check RDP pool on startup
-pool.healthCheckAll().then(() => {
-  console.log(`[g1-service] RDP pool: ${pool.availableCount()}/6 available`);
-});
-
-setInterval(() => pool.healthCheckAll(), 2 * 60 * 1000);
 
 // ─── Notify callback → gọi webhook về bot-ai ─────────────────────────────────
 
@@ -119,10 +111,9 @@ const server = createServer(async (req, res) => {
     });
   }
 
-  // GET /pool — RDP status
+  // GET /pool — no longer using RDP pool
   if (req.method === 'GET' && url.pathname === '/pool') {
-    await pool.healthCheckAll();
-    return json(res, 200, { available: pool.availableCount(), nodes: pool.status() });
+    return json(res, 200, { available: 1, mode: 'direct-playwright' });
   }
 
   json(res, 404, { error: 'not found' });
