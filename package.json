@@ -1,0 +1,13 @@
+{
+  "name": "g1-ultra-service",
+  "version": "1.0.0",
+  "type": "module",
+  "scripts": {
+    "start": "node g1-service.mjs",
+    "dev": "node --watch g1-service.mjs"
+  },
+  "dependencies": {
+    "mongodb": "^6.8.0",
+    "node-fetch": "^3.3.2"
+  }
+}
