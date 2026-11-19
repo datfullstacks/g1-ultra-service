@@ -124,21 +124,34 @@ async function runAutomation(cdpUrl, { email, password, secret, presetId }) {
     const loginPage = ctx.pages()[0] || await ctx.newPage();
     await loginPage.goto('https://accounts.google.com', { timeout: 30_000, waitUntil: 'domcontentloaded' });
 
+    const loginUrl = loginPage.url();
+    console.log(`[g1-worker] login page url: ${loginUrl}`);
     const needLogin = await loginPage.$('input[type="email"]').then(Boolean).catch(() => false);
+    console.log(`[g1-worker] needLogin: ${needLogin}`);
     if (needLogin) {
       await loginPage.fill('input[type="email"]', email);
       await loginPage.click('#identifierNext button, [id="identifierNext"]');
-      await loginPage.waitForSelector('input[type="password"]', { timeout: 15_000 });
-      await loginPage.fill('input[type="password"]', password);
-      await loginPage.click('#passwordNext button, [id="passwordNext"]');
-      await loginPage.waitForTimeout(2500);
+      try {
+        await loginPage.waitForSelector('input[type="password"]', { timeout: 15_000 });
+      } catch (e) {
+        console.log(`[g1-worker] no password field: ${loginPage.url()}`);
+        // Có thể cần phone verification hoặc selector khác
+        await loginPage.waitForTimeout(3000);
+      }
+      await loginPage.fill('input[type="password"]', password).catch(() => {});
+      await loginPage.click('#passwordNext button, [id="passwordNext"]').catch(() => {});
+      await loginPage.waitForTimeout(3000);
+      console.log(`[g1-worker] after password url: ${loginPage.url()}`);
       const totpInput = await loginPage.$('input[name="totpPin"], input[id="totpPin"]').catch(() => null);
+      console.log(`[g1-worker] totp needed: ${!!totpInput}`);
       if (totpInput && secret) {
         const code = totpNow(secret);
+        console.log(`[g1-worker] totp code: ${code}`);
         if (code) {
           await loginPage.fill('input[name="totpPin"], input[id="totpPin"]', code);
           await loginPage.click('#totpNext button').catch(() => loginPage.keyboard.press('Enter'));
-          await loginPage.waitForTimeout(2000);
+          await loginPage.waitForTimeout(3000);
+          console.log(`[g1-worker] after totp url: ${loginPage.url()}`);
         }
       }
     }
