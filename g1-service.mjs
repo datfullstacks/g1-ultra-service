@@ -1,6 +1,5 @@
 import { createServer } from 'node:http';
 import { submitJob, createJob, getJob, getActiveJobByUser, queuePosition, setNotify } from './job-queue.mjs';
-import { pool } from './rdp-pool.mjs';
 
 const PORT = process.env.PORT || 3000;
 const API_SECRET = process.env.G1_SERVICE_API_SECRET || '';
@@ -32,13 +31,10 @@ setNotify(async (job) => {
   }
 });
 
-// Health check every 60s
-setInterval(() => pool.healthCheckAll().catch(() => {}), 60_000);
-
 function readBody(req) {
   return new Promise((resolve, reject) => {
     let data = '';
-    req.on('data', chunk => { data += chunk; });
+    req.on('data', c => { data += c; });
     req.on('end', () => { try { resolve(JSON.parse(data || '{}')); } catch { resolve({}); } });
     req.on('error', reject);
   });
@@ -58,7 +54,7 @@ const server = createServer(async (req, res) => {
   const url = new URL(req.url, 'http://localhost');
 
   if (req.method === 'GET' && url.pathname === '/healthz') {
-    return json(res, 200, { ok: true, rdp: pool.availableCount() });
+    return json(res, 200, { ok: true });
   }
 
   if (!auth(req)) return json(res, 401, { error: 'unauthorized' });
@@ -85,11 +81,11 @@ const server = createServer(async (req, res) => {
     const jobId = url.pathname.split('/')[2];
     const job = getJob(jobId);
     if (!job) return json(res, 404, { error: 'job not found' });
-    return json(res, 200, { jobId: job.jobId, status: job.status, resultMsg: job.resultMsg, rdpName: job.rdpName, sku: job.sku, months: job.months });
-  }
-
-  if (req.method === 'GET' && url.pathname === '/pool') {
-    return json(res, 200, { nodes: pool.status() });
+    return json(res, 200, {
+      jobId: job.jobId, status: job.status,
+      resultMsg: job.resultMsg, rdpName: job.rdpName,
+      sku: job.sku, months: job.months,
+    });
   }
 
   json(res, 404, { error: 'not found' });

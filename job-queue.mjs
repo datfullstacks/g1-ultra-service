@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto';
-import { pool } from './rdp-pool.mjs';
+import { activateG1 } from './g1-activate.mjs';
 
 const PRESET_MAP = {
   '20tb:12': 'ultra20tb_12m',
@@ -12,9 +12,7 @@ const PRESET_MAP = {
   '30tb:1':  'ultra30tb_1m',
 };
 
-/** @type {Map<string, Job>} */
 const jobs = new Map();
-/** @type {Array<Job>} */
 const queue = [];
 let _notifyFn = null;
 
@@ -48,8 +46,6 @@ export function queuePosition(jobId) {
   return queue.findIndex(j => j.jobId === jobId) + 1;
 }
 
-// ─── Dispatcher ───────────────────────────────────────────────────────────────
-
 async function _dispatch() {
   const job = queue.find(j => j.status === 'queued');
   if (!job) return;
@@ -63,28 +59,17 @@ async function _dispatch() {
   queue.splice(queue.indexOf(job), 1);
   job.status = 'processing';
 
-  let node;
   try {
-    node = await pool.acquire();
-    job.rdpName = node.name;
-
-    const result = await node.runJob({
+    const result = await activateG1({
       email: job.email,
       password: job.password,
       secret: job.secret,
       presetId,
-      proxy: job.proxy,
     });
-
-    if (result?.ok) {
-      _finish(job, true, result.message ?? `Google One Ultra ${job.sku.toUpperCase()} ${job.months}m activated`);
-    } else {
-      _finish(job, false, result?.message ?? 'Activation thất bại');
-    }
+    _finish(job, result?.ok, result?.message ?? (result?.ok ? 'Activated' : 'Activation thất bại'));
   } catch (err) {
-    _finish(job, false, `Activation error: ${err.message}`);
+    _finish(job, false, `Error: ${err.message}`);
   } finally {
-    if (node) pool.release(node);
     setImmediate(_dispatch);
   }
 }
