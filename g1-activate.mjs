@@ -86,7 +86,7 @@ const MLX_HEADERS = { 'Content-Type': 'application/json', 'Authorization': `Bear
 
 async function mlxCreateProfile() {
   const { default: fetch } = await import('node-fetch');
-  const res = await fetch(`${MLX_API}/api/v2/profile`, {
+  const res = await fetch(`${MLX_API}/api/v1/profile`, {
     method: 'POST',
     headers: MLX_HEADERS,
     body: JSON.stringify({
@@ -99,14 +99,14 @@ async function mlxCreateProfile() {
   });
   if (!res.ok) throw new Error(`MLX create profile ${res.status}: ${await res.text()}`);
   const data = await res.json();
-  const profileId = data?.data?.profile_id || data?.profile_id;
+  const profileId = data?.data?.id || data?.data?.profile_id || data?.profile_id || data?.id;
   if (!profileId) throw new Error(`MLX create: no profile_id in ${JSON.stringify(data)}`);
   return String(profileId);
 }
 
 async function mlxStartProfile(profileId, launcherUrl) {
   const { default: fetch } = await import('node-fetch');
-  const res = await fetch(`${launcherUrl}/api/v2/profile/start?profile_id=${profileId}`, {
+  const res = await fetch(`${launcherUrl}/api/v1/profile/start?profile_id=${profileId}`, {
     headers: MLX_HEADERS,
     signal: AbortSignal.timeout(60_000),
   });
@@ -120,14 +120,14 @@ async function mlxStartProfile(profileId, launcherUrl) {
 async function mlxStop(profileId, launcherUrl) {
   try {
     const { default: fetch } = await import('node-fetch');
-    await fetch(`${launcherUrl}/api/v2/profile/stop?profile_id=${profileId}`, { headers: MLX_HEADERS, signal: AbortSignal.timeout(10_000) });
+    await fetch(`${launcherUrl}/api/v1/profile/stop?profile_id=${profileId}`, { headers: MLX_HEADERS, signal: AbortSignal.timeout(10_000) });
   } catch { }
 }
 
 async function mlxDelete(profileId) {
   try {
     const { default: fetch } = await import('node-fetch');
-    await fetch(`${MLX_API}/api/v2/profile/${profileId}`, { method: 'DELETE', headers: MLX_HEADERS, signal: AbortSignal.timeout(10_000) });
+    await fetch(`${MLX_API}/api/v1/profile/${profileId}`, { method: 'DELETE', headers: MLX_HEADERS, signal: AbortSignal.timeout(10_000) });
   } catch { }
 }
 
