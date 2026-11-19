@@ -1,5 +1,4 @@
 import { randomUUID } from 'node:crypto';
-import { activateG1 } from './g1-activate.mjs';
 
 const PRESET_MAP = {
   '20tb:12': 'ultra20tb_12m',
@@ -11,6 +10,38 @@ const PRESET_MAP = {
   '30tb:3':  'ultra30tb_3m',
   '30tb:1':  'ultra30tb_1m',
 };
+
+// RDP worker URLs — g1-rdp-worker chạy trên RDP, accessible qua private network
+const WORKER_PORT = process.env.G1_WORKER_PORT || '8788';
+const WORKER_TIMEOUT = Number(process.env.G1_JOB_TIMEOUT_MS || 180_000);
+
+function buildWorkerUrls() {
+  return [10,11,12,13,14,15]
+    .map(n => process.env[`RAILWAY_SERVICE_RAILWAY_LINUX_RDP_${n}_URL`])
+    .filter(Boolean)
+    .map(u => {
+      const name = u.replace(/^https?:\/\//, '').split('.')[0];
+      return `http://${name}.railway.internal:${WORKER_PORT}`;
+    });
+}
+
+const WORKER_URLS = buildWorkerUrls();
+let _workerIdx = 0;
+
+async function callWorker(payload) {
+  if (!WORKER_URLS.length) throw new Error('Không có RDP worker URL — cần RAILWAY_SERVICE_RAILWAY_LINUX_RDP_*_URL');
+  const url = WORKER_URLS[_workerIdx % WORKER_URLS.length];
+  _workerIdx++;
+  const { default: fetch } = await import('node-fetch');
+  const res = await fetch(`${url}/job`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload),
+    signal: AbortSignal.timeout(WORKER_TIMEOUT + 5_000),
+  });
+  if (!res.ok) throw new Error(`Worker HTTP ${res.status}: ${await res.text()}`);
+  return res.json();
+}
 
 const jobs = new Map();
 const queue = [];
@@ -60,11 +91,12 @@ async function _dispatch() {
   job.status = 'processing';
 
   try {
-    const result = await activateG1({
+    const result = await callWorker({
       email: job.email,
       password: job.password,
       secret: job.secret,
       presetId,
+      proxy: job.proxy,
     });
     _finish(job, result?.ok, result?.message ?? (result?.ok ? 'Activated' : 'Activation thất bại'));
   } catch (err) {
