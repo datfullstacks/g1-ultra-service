@@ -84,9 +84,9 @@ function totpNow(secret) {
 
 const MLX_HEADERS = { 'Content-Type': 'application/json', 'Authorization': `Bearer ${MLX_TOKEN}` };
 
-async function mlxCreateProfile() {
+async function mlxCreateProfile(launcherUrl) {
   const { default: fetch } = await import('node-fetch');
-  const res = await fetch(`${MLX_API}/api/v1/profile`, {
+  const res = await fetch(`${launcherUrl}/api/v1/profile`, {
     method: 'POST',
     headers: MLX_HEADERS,
     body: JSON.stringify({
@@ -124,10 +124,10 @@ async function mlxStop(profileId, launcherUrl) {
   } catch { }
 }
 
-async function mlxDelete(profileId) {
+async function mlxDelete(profileId, launcherUrl) {
   try {
     const { default: fetch } = await import('node-fetch');
-    await fetch(`${MLX_API}/api/v1/profile/${profileId}`, { method: 'DELETE', headers: MLX_HEADERS, signal: AbortSignal.timeout(10_000) });
+    await fetch(`${launcherUrl}/api/v1/profile/${profileId}`, { method: 'DELETE', headers: MLX_HEADERS, signal: AbortSignal.timeout(10_000) });
   } catch { }
 }
 
@@ -228,7 +228,7 @@ export async function activateG1({ email, password, secret = '', presetId, timeo
   const launcherUrl = pickLauncher();
   let profileId = '';
   try {
-    profileId = await mlxCreateProfile();
+    profileId = await mlxCreateProfile(launcherUrl);
     const wsEndpoint = await mlxStartProfile(profileId, launcherUrl);
     return await Promise.race([
       runAutomation(wsEndpoint, { email, password, secret, presetId }),
@@ -237,7 +237,7 @@ export async function activateG1({ email, password, secret = '', presetId, timeo
   } finally {
     if (profileId) {
       await mlxStop(profileId, launcherUrl);
-      await mlxDelete(profileId);
+      await mlxDelete(profileId, launcherUrl);
     }
   }
 }
