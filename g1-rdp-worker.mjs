@@ -143,8 +143,9 @@ async function runAutomation(cdpUrl, { email, password, secret, presetId }) {
       }
     }
 
-    const storePage = await ctx.newPage();
-    await storePage.addInitScript(G1_INJECT);
+    // Dùng cùng page sau login để giữ cookie session
+    const storePage = loginPage;
+    await ctx.addInitScript(G1_INJECT); // inject vào toàn context
     await storePage.goto('https://one.google.com/about/plans', { timeout: 30_000, waitUntil: 'domcontentloaded' });
     await storePage.evaluate((pid) => {
       window.postMessage({ __g1pk: 1, type: 'cfg', presetId: pid, includeYt: true }, '*');
