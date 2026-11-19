@@ -167,8 +167,11 @@ async function runAutomation(cdpUrl, { email, password, secret, presetId }) {
 
     await storePage.waitForTimeout(3000);
     const bodyText = await storePage.innerText('body').catch(() => '');
+    const url = storePage.url();
+    console.log(`[g1-worker] page url: ${url}`);
+    console.log(`[g1-worker] body snippet: ${bodyText.slice(0, 300).replace(/\n/g, ' ')}`);
     const ok = /subscrib|đăng ký thành công|activated|thank you|cảm ơn/i.test(bodyText);
-    return { ok, message: ok ? `Google One Ultra ${presetId} activated` : 'Checkout completed — verify manually' };
+    return { ok, message: ok ? `Google One Ultra ${presetId} activated` : `Checkout completed — url: ${url}` };
   } finally {
     await browser.close().catch(() => {});
   }
