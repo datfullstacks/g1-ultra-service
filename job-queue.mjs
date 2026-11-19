@@ -16,7 +16,9 @@ const WORKER_PORT = process.env.G1_WORKER_PORT || '8788';
 const WORKER_TIMEOUT = Number(process.env.G1_JOB_TIMEOUT_MS || 180_000);
 
 function buildWorkerUrls() {
-  return [10,11,12,13,14,15]
+  // G1_WORKER_RDP_LIST = comma-separated RDP numbers with worker deployed, e.g. "10,11"
+  const list = (process.env.G1_WORKER_RDP_LIST || '10,11,12,13,14,15').split(',').map(s => s.trim()).filter(Boolean);
+  return list
     .map(n => process.env[`RAILWAY_SERVICE_RAILWAY_LINUX_RDP_${n}_URL`])
     .filter(Boolean)
     .map(u => {
