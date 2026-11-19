@@ -1,17 +1,17 @@
 /**
  * g1-rdp-worker.mjs — chạy trên RDP, nhận job từ g1-ultra-service
- * Env: MLX_TOKEN, MLX_LAUNCHER_URL=https://launcher.mlx.yt:45001, PORT=8787
+ * Env: MULTILOGIN_AGENT_TOKEN, PORT=8788
  */
 import { createServer } from 'node:http';
 import { createHmac } from 'node:crypto';
 import { chromium } from 'playwright-core';
 
-const PORT = process.env.PORT || '8787';
-const MLX_TOKEN = process.env.MLX_TOKEN || process.env.MULTILOGIN_AGENT_TOKEN || '';
-const MLX_LAUNCHER = (process.env.MLX_LAUNCHER_URL || 'http://127.0.0.1:35000').replace(/\/$/, '');
+const PORT = process.env.PORT || '8788';
+const AGENT_TOKEN = process.env.MULTILOGIN_AGENT_TOKEN || '';
+const AGENT_URL = `http://127.0.0.1:${process.env.MULTILOGIN_AGENT_PORT || '8787'}`;
 const JOB_TIMEOUT = Number(process.env.G1_JOB_TIMEOUT_MS || 180_000);
 
-const MLX_HEADERS = { 'Content-Type': 'application/json', 'Authorization': `Bearer ${MLX_TOKEN}` };
+const AGENT_HEADERS = { 'Content-Type': 'application/json', 'x-agent-token': AGENT_TOKEN };
 
 // ─── G1 inject ────────────────────────────────────────────────────────────────
 
@@ -67,29 +67,51 @@ function totpNow(secret) {
   return String(code).padStart(6, '0');
 }
 
-// ─── Multilogin quick profile ─────────────────────────────────────────────────
+// ─── Multilogin agent job API ─────────────────────────────────────────────────
 
-async function mlxQuickProfile() {
-  const res = await fetch(`${MLX_LAUNCHER}/api/v2/profile/quick`, {
+async function agentPost(path, body) {
+  const res = await fetch(`${AGENT_URL}${path}`, {
     method: 'POST',
-    headers: MLX_HEADERS,
-    body: JSON.stringify({ browser_type: 'mimic', os_type: 'windows', automation: 'playwright', headless_mode: false }),
+    headers: AGENT_HEADERS,
+    body: JSON.stringify(body),
     signal: AbortSignal.timeout(60_000),
   });
-  if (!res.ok) throw new Error(`MLX quick profile ${res.status}: ${await res.text()}`);
-  const data = await res.json();
-  const profileId = data?.data?.id || data?.data?.profile_id;
-  const port = data?.data?.port;
-  if (!port) throw new Error(`MLX quick profile: no port in ${JSON.stringify(data)}`);
-  return { profileId: String(profileId || ''), cdpUrl: `http://127.0.0.1:${port}` };
+  if (!res.ok) throw new Error(`Agent ${path} ${res.status}: ${await res.text()}`);
+  return res.json();
 }
 
-async function mlxStopProfile(profileId) {
-  if (!profileId) return;
+async function agentGet(path) {
+  const res = await fetch(`${AGENT_URL}${path}`, {
+    headers: AGENT_HEADERS,
+    signal: AbortSignal.timeout(10_000),
+  });
+  if (!res.ok) throw new Error(`Agent GET ${path} ${res.status}: ${await res.text()}`);
+  return res.json();
+}
+
+async function startSession() {
+  // Submit quick profile job
+  const { job } = await agentPost('/v1/jobs', {
+    type: 'profile.quick.start',
+    payload: { browserType: 'mimic', osType: 'windows', automation: 'playwright', headless: false },
+  });
+
+  // Poll job đến completed
+  for (let i = 0; i < 30; i++) {
+    const { job: j } = await agentGet(`/v1/jobs/${job.id}`);
+    if (j.status === 'completed') {
+      const session = j.result;
+      return { sessionId: session.sessionId, cdpUrl: `${AGENT_URL}${session.connectionPath}` };
+    }
+    if (j.status === 'failed') throw new Error(`Quick profile failed: ${JSON.stringify(j.error)}`);
+    await new Promise(r => setTimeout(r, 1000));
+  }
+  throw new Error('Quick profile job timed out');
+}
+
+async function stopSession(sessionId) {
   try {
-    await fetch(`${MLX_LAUNCHER}/api/v1/profile/stop/p/${profileId}`, {
-      headers: MLX_HEADERS, signal: AbortSignal.timeout(10_000),
-    });
+    await agentPost('/v1/jobs', { type: 'profile.stop', payload: { sessionId } });
   } catch { }
 }
 
@@ -182,10 +204,10 @@ createServer(async (req, res) => {
     return json(res, 400, { error: 'missing: email, password, presetId' });
   }
 
-  let profileId = '';
+  let sessionId = '';
   try {
-    const { profileId: pid, cdpUrl } = await mlxQuickProfile();
-    profileId = pid;
+    const { sessionId: sid, cdpUrl } = await startSession();
+    sessionId = sid;
     const result = await Promise.race([
       runAutomation(cdpUrl, { email, password, secret, presetId }),
       new Promise((_, rej) => setTimeout(() => rej(new Error('Job timeout')), JOB_TIMEOUT)),
@@ -195,6 +217,6 @@ createServer(async (req, res) => {
     console.error('[g1-worker] job failed:', err.message);
     json(res, 200, { ok: false, message: err.message });
   } finally {
-    await mlxStopProfile(profileId);
+    await stopSession(sessionId);
   }
 }).listen(PORT, () => console.log(`[g1-rdp-worker] listening :${PORT}`));
