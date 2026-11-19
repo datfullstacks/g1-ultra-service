@@ -8,7 +8,7 @@ import { chromium } from 'playwright-core';
 
 const PORT = process.env.PORT || '8787';
 const MLX_TOKEN = process.env.MLX_TOKEN || process.env.MULTILOGIN_AGENT_TOKEN || '';
-const MLX_LAUNCHER = (process.env.MLX_LAUNCHER_URL || 'https://launcher.mlx.yt:45001').replace(/\/$/, '');
+const MLX_LAUNCHER = (process.env.MLX_LAUNCHER_URL || 'http://localhost:35000').replace(/\/$/, '');
 const JOB_TIMEOUT = Number(process.env.G1_JOB_TIMEOUT_MS || 180_000);
 
 const MLX_HEADERS = { 'Content-Type': 'application/json', 'Authorization': `Bearer ${MLX_TOKEN}` };
