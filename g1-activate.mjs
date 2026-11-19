@@ -7,24 +7,30 @@ const MLX_API     = (process.env.MLX_API_URL     || 'https://api.multilogin.com'
 const MLX_TOKEN   = process.env.MLX_TOKEN || process.env.MULTILOGIN_AGENT_TOKEN || '';
 const MLX_FOLDER  = process.env.MLX_FOLDER_ID || '';
 
-// RDP-10 launcher accessible via Railway private network
-const RDP_URLS = [
-  process.env.RAILWAY_SERVICE_RAILWAY_LINUX_RDP_10_URL,
-  process.env.RAILWAY_SERVICE_RAILWAY_LINUX_RDP_11_URL,
-  process.env.RAILWAY_SERVICE_RAILWAY_LINUX_RDP_12_URL,
-  process.env.RAILWAY_SERVICE_RAILWAY_LINUX_RDP_13_URL,
-  process.env.RAILWAY_SERVICE_RAILWAY_LINUX_RDP_14_URL,
-  process.env.RAILWAY_SERVICE_RAILWAY_LINUX_RDP_15_URL,
-].filter(Boolean);
-
-// Multilogin launcher port trên mỗi RDP
+// Multilogin launcher URL — set MLX_LAUNCHER_URL hoặc tự build từ RDP private domain
 const MLX_PORT = process.env.MULTILOGIN_AGENT_PORT || '35000';
 
-function rdpLauncherUrl(rdpServiceUrl) {
-  // RAILWAY_SERVICE_*_URL = https://host:port — đổi sang http private port 35000
-  const name = rdpServiceUrl.replace(/^https?:\/\//, '').split('.')[0];
-  return `http://${name}.railway.internal:${MLX_PORT}`;
+function buildLauncherUrls() {
+  // Nếu có MLX_LAUNCHER_URL set thẳng — dùng nó (comma-separated cho nhiều RDP)
+  if (process.env.MLX_LAUNCHER_URL) {
+    return process.env.MLX_LAUNCHER_URL.split(',').map(u => {
+      u = u.trim();
+      // Nếu chỉ là domain (từ RAILWAY_PRIVATE_DOMAIN), thêm scheme + port
+      if (!u.startsWith('http')) return `http://${u}:${MLX_PORT}`;
+      return u;
+    });
+  }
+  // Fallback: build từ RAILWAY_SERVICE_*_URL
+  return [10,11,12,13,14,15]
+    .map(n => process.env[`RAILWAY_SERVICE_RAILWAY_LINUX_RDP_${n}_URL`])
+    .filter(Boolean)
+    .map(u => {
+      const name = u.replace(/^https?:\/\//, '').split('.')[0];
+      return `http://${name}.railway.internal:${MLX_PORT}`;
+    });
 }
+
+const LAUNCHER_URLS = buildLauncherUrls();
 
 // ─── G1 inject script ─────────────────────────────────────────────────────────
 
@@ -131,13 +137,13 @@ async function mlxDelete(profileId, launcherUrl) {
   } catch { }
 }
 
-// Pick RDP launcher — round robin simple
+// Pick RDP launcher — round robin
 let _rdpIdx = 0;
 function pickLauncher() {
-  if (!RDP_URLS.length) throw new Error('Không có RDP URL nào — set RAILWAY_SERVICE_RAILWAY_LINUX_RDP_*_URL');
-  const url = RDP_URLS[_rdpIdx % RDP_URLS.length];
+  if (!LAUNCHER_URLS.length) throw new Error('Không có RDP launcher URL — set MLX_LAUNCHER_URL hoặc RAILWAY_SERVICE_RAILWAY_LINUX_RDP_*_URL');
+  const url = LAUNCHER_URLS[_rdpIdx % LAUNCHER_URLS.length];
   _rdpIdx++;
-  return rdpLauncherUrl(url);
+  return url;
 }
 
 // ─── Automation ───────────────────────────────────────────────────────────────
