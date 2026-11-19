@@ -8,7 +8,7 @@
 
 import { createServer } from 'node:http';
 import { createHmac } from 'node:crypto';
-import { chromium } from 'playwright';
+import { chromium } from 'playwright-core';
 
 // Inline inject script — copy của extension inject.js, inject vào MAIN world trước page load
 // Playwright addInitScript chạy trong MAIN world, tương đương extension world: MAIN

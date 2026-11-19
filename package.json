@@ -4,11 +4,9 @@
   "type": "module",
   "scripts": {
     "start": "node g1-service.mjs",
-    "dev": "node --watch g1-service.mjs",
-    "postinstall": "echo 'skipped browser install — using base image'"
+    "dev": "node --watch g1-service.mjs"
   },
   "dependencies": {
-    "node-fetch": "^3.3.2",
-    "playwright": "^1.49.0"
+    "node-fetch": "^3.3.2"
   }
 }

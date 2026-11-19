@@ -1,18 +1,12 @@
-/**
- * G1 Ultra Service — HTTP API server
- * Được gọi bởi bot-ai, không phải bot độc lập
- */
 import { createServer } from 'node:http';
 import { submitJob, createJob, getJob, getActiveJobByUser, queuePosition, setNotify } from './job-queue.mjs';
+import { pool } from './rdp-pool.mjs';
 
 const PORT = process.env.PORT || 3000;
 const API_SECRET = process.env.G1_SERVICE_API_SECRET || '';
+const BOT_AI_URL = process.env.BOT_AI_URL || '';
 
 console.log('[g1-service] starting on port', PORT);
-
-// ─── Notify callback → gọi webhook về bot-ai ─────────────────────────────────
-
-const BOT_AI_URL = process.env.RAILWAY_SERVICE_BOT_AI_URL || process.env.BOT_AI_URL || '';
 
 setNotify(async (job) => {
   if (!BOT_AI_URL) return;
@@ -20,10 +14,7 @@ setNotify(async (job) => {
     const { default: fetch } = await import('node-fetch');
     await fetch(`${BOT_AI_URL}/internal/g1-job-result`, {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'x-internal-secret': API_SECRET,
-      },
+      headers: { 'Content-Type': 'application/json', 'x-internal-secret': API_SECRET },
       body: JSON.stringify({
         jobId: job.jobId,
         userId: job.userId,
@@ -41,16 +32,14 @@ setNotify(async (job) => {
   }
 });
 
-// ─── HTTP Server ──────────────────────────────────────────────────────────────
+// Health check every 60s
+setInterval(() => pool.healthCheckAll().catch(() => {}), 60_000);
 
 function readBody(req) {
   return new Promise((resolve, reject) => {
     let data = '';
     req.on('data', chunk => { data += chunk; });
-    req.on('end', () => {
-      try { resolve(JSON.parse(data || '{}')); }
-      catch { resolve({}); }
-    });
+    req.on('end', () => { try { resolve(JSON.parse(data || '{}')); } catch { resolve({}); } });
     req.on('error', reject);
   });
 }
@@ -66,16 +55,14 @@ function auth(req) {
 }
 
 const server = createServer(async (req, res) => {
-  const url = new URL(req.url, `http://localhost`);
+  const url = new URL(req.url, 'http://localhost');
 
-  // Health check — no auth needed
   if (req.method === 'GET' && url.pathname === '/healthz') {
-    return json(res, 200, { ok: true, mode: 'direct-playwright' });
+    return json(res, 200, { ok: true, rdp: pool.availableCount() });
   }
 
   if (!auth(req)) return json(res, 401, { error: 'unauthorized' });
 
-  // POST /job — submit job mới
   if (req.method === 'POST' && url.pathname === '/job') {
     const body = await readBody(req);
     const { userId, email, password, secret = '', sku, months, proxy } = body;
@@ -91,34 +78,21 @@ const server = createServer(async (req, res) => {
 
     const job = createJob({ userId, email, password, secret, sku, months, proxy });
     submitJob(job);
-    const pos = queuePosition(job.jobId);
-
-    return json(res, 202, { ok: true, jobId: job.jobId, position: pos });
+    return json(res, 202, { ok: true, jobId: job.jobId, position: queuePosition(job.jobId) });
   }
 
-  // GET /job/:id — status
   if (req.method === 'GET' && url.pathname.startsWith('/job/')) {
     const jobId = url.pathname.split('/')[2];
     const job = getJob(jobId);
     if (!job) return json(res, 404, { error: 'job not found' });
-    return json(res, 200, {
-      jobId: job.jobId,
-      status: job.status,
-      resultMsg: job.resultMsg,
-      rdpName: job.rdpName,
-      sku: job.sku,
-      months: job.months,
-    });
+    return json(res, 200, { jobId: job.jobId, status: job.status, resultMsg: job.resultMsg, rdpName: job.rdpName, sku: job.sku, months: job.months });
   }
 
-  // GET /pool — no longer using RDP pool
   if (req.method === 'GET' && url.pathname === '/pool') {
-    return json(res, 200, { available: 1, mode: 'direct-playwright' });
+    return json(res, 200, { nodes: pool.status() });
   }
 
   json(res, 404, { error: 'not found' });
 });
 
-server.listen(PORT, () => {
-  console.log(`[g1-service] listening on :${PORT}`);
-});
+server.listen(PORT, () => console.log(`[g1-service] listening on :${PORT}`));

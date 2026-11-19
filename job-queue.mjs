@@ -1,9 +1,5 @@
-/**
- * Job queue — nhận job từ bot, chạy Playwright activation trực tiếp
- * (Không cần RDP pool — g1-ultra-service tự activate)
- */
 import { randomUUID } from 'node:crypto';
-import { activateG1 } from './g1-activate.mjs';
+import { pool } from './rdp-pool.mjs';
 
 const PRESET_MAP = {
   '20tb:12': 'ultra20tb_12m',
@@ -27,14 +23,8 @@ export function setNotify(fn) { _notifyFn = fn; }
 export function createJob({ userId, email, password, secret, sku, months, proxy = null }) {
   return {
     jobId: randomUUID(),
-    userId,
-    email,
-    password,
-    secret,
-    sku,
-    months,
-    proxy,
-    status: 'queued', // queued | processing | done | failed
+    userId, email, password, secret, sku, months, proxy,
+    status: 'queued',
     resultMsg: '',
     rdpName: '',
     createdAt: Date.now(),
@@ -58,8 +48,7 @@ export function queuePosition(jobId) {
   return queue.findIndex(j => j.jobId === jobId) + 1;
 }
 
-
-// ─── Internal dispatcher ─────────────────────────────────────────────────────
+// ─── Dispatcher ───────────────────────────────────────────────────────────────
 
 async function _dispatch() {
   const job = queue.find(j => j.status === 'queued');
@@ -71,16 +60,20 @@ async function _dispatch() {
     return;
   }
 
-  // Remove from pending queue
   queue.splice(queue.indexOf(job), 1);
   job.status = 'processing';
 
+  let node;
   try {
-    const result = await activateG1({
+    node = await pool.acquire();
+    job.rdpName = node.name;
+
+    const result = await node.runJob({
       email: job.email,
       password: job.password,
       secret: job.secret,
       presetId,
+      proxy: job.proxy,
     });
 
     if (result?.ok) {
@@ -91,7 +84,7 @@ async function _dispatch() {
   } catch (err) {
     _finish(job, false, `Activation error: ${err.message}`);
   } finally {
-    // Try next job
+    if (node) pool.release(node);
     setImmediate(_dispatch);
   }
 }
