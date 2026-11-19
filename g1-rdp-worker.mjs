@@ -99,11 +99,11 @@ async function startSession() {
   // Poll job đến completed
   for (let i = 0; i < 30; i++) {
     const { job: j } = await agentGet(`/v1/jobs/${job.id}`);
-    if (j.status === 'completed') {
+    if (j.status === 'succeeded' || j.status === 'completed') {
       const session = j.result;
       return { sessionId: session.sessionId, cdpUrl: `${AGENT_URL}${session.connectionPath}` };
     }
-    if (j.status === 'failed') throw new Error(`Quick profile failed: ${JSON.stringify(j.error)}`);
+    if (j.status === 'failed' || j.status === 'cancelled') throw new Error(`Quick profile failed: ${JSON.stringify(j.error)}`);
     await new Promise(r => setTimeout(r, 1000));
   }
   throw new Error('Quick profile job timed out');
